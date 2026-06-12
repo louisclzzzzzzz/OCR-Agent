@@ -1,0 +1,9 @@
+{
+  "name": "ocr-agent-mistral",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OCR Agent - extraction de documents administratifs via Tesseract.js + API Mistral (Vercel)",
+  "engines": {
+    "node": ">=18"
+  }
+}
