@@ -59,18 +59,20 @@ module.exports = async function handler(req, res) {
 
   const { docType, ocrText } = body || {};
 
-  const schema = DOC_SCHEMAS[docType];
-  if (!schema) {
-    res.status(400).json({ error: 'Type de document inconnu.' });
-    return;
-  }
-
   if (!ocrText || !String(ocrText).trim()) {
     res.status(400).json({ error: 'Texte OCR manquant.' });
     return;
   }
 
-  const prompt = buildPrompt(schema, String(ocrText).trim());
+  const trimmedText = String(ocrText).trim();
+  const autoDetect = !docType;
+
+  if (!autoDetect && !DOC_SCHEMAS[docType]) {
+    res.status(400).json({ error: 'Type de document inconnu.' });
+    return;
+  }
+
+  const prompt = autoDetect ? buildAutoDetectPrompt(trimmedText) : buildPrompt(DOC_SCHEMAS[docType], trimmedText);
 
   try {
     const mistralResponse = await fetch(MISTRAL_API_URL, {
@@ -113,7 +115,12 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    res.status(200).json({ result: parsed });
+    if (autoDetect) {
+      const detectedType = DOC_SCHEMAS[parsed.type_detecte] ? parsed.type_detecte : 'inconnu';
+      res.status(200).json({ result: parsed.champs || {}, docType: detectedType });
+    } else {
+      res.status(200).json({ result: parsed, docType });
+    }
   } catch (err) {
     res.status(500).json({ error: `Erreur lors de l'appel à l'API Mistral : ${err.message || err}` });
   }
@@ -144,6 +151,43 @@ Règles :
 - Ne devine et n'invente jamais une valeur.
 - Restitue les dates telles qu'elles apparaissent dans le texte, sans les reformater.
 - Réponds uniquement avec l'objet JSON, sans texte, sans commentaire, sans bloc de code.`;
+}
+
+function buildAutoDetectPrompt(ocrText) {
+  const typeDescriptions = Object.entries(DOC_SCHEMAS).map(([key, schema]) => {
+    const schemaObj = {};
+    const descriptions = [];
+    Object.entries(schema.fields).forEach(([fieldKey, description]) => {
+      schemaObj[fieldKey] = '';
+      descriptions.push(`    - "${fieldKey}" : ${description}`);
+    });
+    return `- "${key}" (${schema.label}) :\n${descriptions.join('\n')}\n  Schéma "champs" attendu pour ce type :\n${JSON.stringify(schemaObj, null, 2)}`;
+  }).join('\n\n');
+
+  return `Voici le texte brut extrait par OCR à partir d'un document administratif. Tu ne connais pas son type à l'avance.
+
+"""
+${ocrText}
+"""
+
+Identifie de quel type de document il s'agit, parmi les types suivants :
+
+${typeDescriptions}
+
+- "inconnu" : si le document ne correspond à aucun des types ci-dessus.
+
+Réponds UNIQUEMENT avec un objet JSON valide de la forme suivante (aucun texte, commentaire ou bloc de code autour) :
+{
+  "type_detecte": "domicile" | "rib" | "cni" | "inconnu",
+  "champs": { ... }
+}
+
+Règles :
+- "type_detecte" doit être exactement une de ces quatre valeurs.
+- "champs" doit contenir exactement les clés du schéma "champs" correspondant au type détecté (objet vide {} si "inconnu").
+- Si une information est absente, illisible ou non présente dans le texte, mets une chaîne vide "" pour la clé correspondante.
+- Ne devine et n'invente jamais une valeur.
+- Restitue les dates telles qu'elles apparaissent dans le texte, sans les reformater.`;
 }
 
 function extractJson(text) {

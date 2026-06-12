@@ -1,8 +1,9 @@
 # OCR Agent — version Mistral (Vercel)
 
-Extraction d'informations à partir de documents administratifs (justificatif de domicile, RIB, CNI) :
+Extraction d'informations à partir d'un batch de documents administratifs (justificatif de domicile, RIB, CNI) :
+- Upload multi-fichiers (JPG, PNG, PDF), traités indépendamment
 - OCR via l'API Mistral OCR (`mistral-ocr-2512`), appelée depuis une fonction serverless Vercel (`api/ocr.js`)
-- Extraction structurée via l'API Mistral (chat completions), appelée depuis `api/extract.js`
+- Le type de document est détecté automatiquement (sans sélection manuelle) et les champs correspondants sont extraits via l'API Mistral (chat completions), appelée depuis `api/extract.js`
 
 La clé API Mistral n'est jamais exposée au navigateur : toutes les requêtes vers l'API Mistral passent par les fonctions serverless.
 

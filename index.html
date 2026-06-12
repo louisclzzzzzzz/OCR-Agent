@@ -26,7 +26,7 @@
     padding: 24px;
   }
   .container {
-    max-width: 820px;
+    max-width: 860px;
     margin: 0 auto;
   }
   header {
@@ -58,6 +58,7 @@
     margin: 0 0 14px 0;
     font-size: 1.05rem;
     color: var(--primary);
+    flex-wrap: wrap;
   }
   .step-number {
     background: var(--primary);
@@ -97,27 +98,6 @@
     color: var(--muted);
     margin-top: 4px;
   }
-  .doc-types {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .doc-type-card {
-    flex: 1 1 200px;
-    border: 2px solid var(--border);
-    border-radius: 6px;
-    padding: 12px;
-    cursor: pointer;
-    text-align: center;
-    transition: border-color 0.15s, background 0.15s;
-    font-weight: 600;
-    font-size: 0.92rem;
-  }
-  .doc-type-card.selected {
-    border-color: var(--primary-light);
-    background: #eaf2f8;
-    color: var(--primary);
-  }
   .dropzone {
     border: 2px dashed var(--border);
     border-radius: 6px;
@@ -132,11 +112,6 @@
     background: #eaf2f8;
   }
   .dropzone strong { color: var(--primary); }
-  .file-info {
-    margin-top: 10px;
-    font-size: 0.85rem;
-    color: var(--text);
-  }
   button {
     background: var(--primary);
     color: #fff;
@@ -208,6 +183,11 @@
     color: var(--success);
     border: 1px solid #b7e4c7;
   }
+  .alert-warning {
+    background: #fef5e7;
+    color: #9a6b1c;
+    border: 1px solid #fbe3b5;
+  }
   .result-field {
     display: flex;
     gap: 8px;
@@ -221,70 +201,69 @@
     margin-bottom: 3px;
   }
   .hidden { display: none !important; }
+
+  .doc-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .doc-filename {
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .doc-size {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .doc-type-badge {
+    margin-left: auto;
+    background: #eaf2f8;
+    color: var(--primary);
+    border: 1px solid var(--primary-light);
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .doc-type-badge.unknown {
+    background: #fef5e7;
+    color: #9a6b1c;
+    border-color: #fbe3b5;
+  }
+  .ocr-section, .results-section {
+    margin-top: 14px;
+  }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>Extraction de documents administratifs</h1>
-    <p>OCR et extraction structurée via l'API Mistral (mistral-ocr-2512)</p>
+    <p>OCR et détection automatique du type via l'API Mistral (mistral-ocr-2512)</p>
   </header>
 
-  <!-- Étape 1 : Type de document -->
+  <!-- Étape 1 : Upload -->
   <div class="step">
-    <h2 class="step-title"><span class="step-number">1</span> Type de document</h2>
-    <div class="doc-types" id="docTypes">
-      <div class="doc-type-card" data-type="domicile">Justificatif de domicile</div>
-      <div class="doc-type-card" data-type="rib">RIB</div>
-      <div class="doc-type-card" data-type="cni">CNI / Carte d'identité</div>
-    </div>
-  </div>
-
-  <!-- Étape 2 : Upload -->
-  <div class="step">
-    <h2 class="step-title"><span class="step-number">2</span> Document à analyser</h2>
+    <h2 class="step-title"><span class="step-number">1</span> Documents à analyser</h2>
     <div class="dropzone" id="dropzone">
-      <p>Glissez-déposez votre fichier ici, ou <strong>cliquez pour choisir un fichier</strong></p>
-      <p class="hint">Formats acceptés : JPG, PNG, PDF</p>
-      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg,application/pdf" class="hidden">
+      <p>Glissez-déposez un ou plusieurs fichiers ici, ou <strong>cliquez pour les choisir</strong></p>
+      <p class="hint">Formats acceptés : JPG, PNG, PDF — le type de document (justificatif de domicile, RIB, CNI) est détecté automatiquement pour chaque fichier.</p>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg,application/pdf" multiple class="hidden">
     </div>
-    <div class="file-info" id="fileInfo"></div>
-    <div class="loading hidden" id="ocrLoading">
-      <div class="spinner"></div>
-      <span id="ocrStatus">Analyse en cours...</span>
-    </div>
-    <div id="ocrError"></div>
+    <div id="globalError"></div>
   </div>
 
-  <!-- Étape 3 : Texte OCR -->
-  <div class="step hidden" id="step3">
-    <h2 class="step-title"><span class="step-number">3</span> Texte extrait (OCR) — modifiable</h2>
-    <textarea id="ocrText" placeholder="Le texte extrait apparaîtra ici. Vous pouvez le corriger avant envoi."></textarea>
-    <div class="actions">
-      <button id="sendBtn">Extraire les informations</button>
-    </div>
-    <div class="loading hidden" id="apiLoading">
-      <div class="spinner"></div>
-      <span>Analyse par l'IA en cours...</span>
-    </div>
-    <div id="apiError"></div>
-  </div>
-
-  <!-- Étape 4 : Résultats -->
-  <div class="step hidden" id="step4">
-    <h2 class="step-title"><span class="step-number">4</span> Informations extraites</h2>
-    <div id="resultsContainer"></div>
-    <div class="actions">
-      <button class="secondary" id="copyAllBtn">Copier tout</button>
-    </div>
-    <div id="resultMsg"></div>
-  </div>
+  <!-- Liste des documents traités -->
+  <div id="documentsContainer"></div>
 
 </div>
 
 <script>
 // ---------------------------------------------------------------------
-// Schémas et libellés par type de document
+// Schémas et libellés par type de document (pour l'affichage)
 // ---------------------------------------------------------------------
 const DOC_SCHEMAS = {
   domicile: {
@@ -320,28 +299,15 @@ const DOC_SCHEMAS = {
   }
 };
 
-let selectedDocType = null;
-
-document.querySelectorAll('.doc-type-card').forEach(card => {
-  card.addEventListener('click', () => {
-    document.querySelectorAll('.doc-type-card').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    selectedDocType = card.dataset.type;
-  });
-});
+const VALID_FILE_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
 
 // ---------------------------------------------------------------------
-// Étape 2 : Upload + OCR
+// Upload (multi-fichiers)
 // ---------------------------------------------------------------------
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const fileInfo = document.getElementById('fileInfo');
-const ocrLoading = document.getElementById('ocrLoading');
-const ocrStatus = document.getElementById('ocrStatus');
-const ocrErrorDiv = document.getElementById('ocrError');
-const step3 = document.getElementById('step3');
-const step4 = document.getElementById('step4');
-const ocrTextArea = document.getElementById('ocrText');
+const globalErrorDiv = document.getElementById('globalError');
+const documentsContainer = document.getElementById('documentsContainer');
 
 dropzone.addEventListener('click', () => fileInput.click());
 
@@ -354,11 +320,12 @@ dropzone.addEventListener('drop', e => {
   e.preventDefault();
   dropzone.classList.remove('dragover');
   if (e.dataTransfer.files.length) {
-    handleFile(e.dataTransfer.files[0]);
+    handleFiles(e.dataTransfer.files);
   }
 });
 fileInput.addEventListener('change', e => {
-  if (e.target.files.length) handleFile(e.target.files[0]);
+  if (e.target.files.length) handleFiles(e.target.files);
+  fileInput.value = '';
 });
 
 function showError(container, message) {
@@ -373,31 +340,91 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-async function handleFile(file) {
-  clearError(ocrErrorDiv);
-  step3.classList.add('hidden');
-  step4.classList.add('hidden');
+function handleFiles(fileList) {
+  clearError(globalErrorDiv);
+  const files = Array.from(fileList);
+  const invalid = files.filter(f => !VALID_FILE_TYPES.includes(f.type));
 
-  if (!selectedDocType) {
-    showError(ocrErrorDiv, "Veuillez d'abord sélectionner un type de document (étape 1).");
-    return;
+  if (invalid.length) {
+    showError(globalErrorDiv, `Format non supporté pour : ${invalid.map(f => f.name).join(', ')}. Utilisez JPG, PNG ou PDF.`);
   }
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-  if (!validTypes.includes(file.type)) {
-    showError(ocrErrorDiv, "Format de fichier non supporté. Utilisez JPG, PNG ou PDF.");
-    return;
-  }
+  files.filter(f => VALID_FILE_TYPES.includes(f.type)).forEach(processFile);
+}
 
-  fileInfo.textContent = `Fichier sélectionné : ${file.name} (${(file.size / 1024).toFixed(1)} Ko)`;
+// ---------------------------------------------------------------------
+// Traitement d'un document : OCR puis extraction (type auto-détecté)
+// ---------------------------------------------------------------------
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Impossible de lire le fichier.'));
+    reader.readAsDataURL(file);
+  });
+}
 
-  ocrLoading.classList.remove('hidden');
-  ocrStatus.textContent = 'Lecture du fichier...';
+function createDocumentCard(file) {
+  const card = document.createElement('div');
+  card.className = 'step';
+  card.innerHTML = `
+    <div class="doc-card-header">
+      <span class="doc-filename">${escapeHtml(file.name)}</span>
+      <span class="doc-size">(${(file.size / 1024).toFixed(1)} Ko)</span>
+      <span class="doc-type-badge hidden"></span>
+    </div>
 
+    <div class="loading" data-role="ocr-loading">
+      <div class="spinner"></div>
+      <span>Reconnaissance de texte (OCR) en cours...</span>
+    </div>
+    <div data-role="ocr-error"></div>
+
+    <div class="ocr-section hidden" data-role="ocr-section">
+      <label>Texte extrait (OCR) — modifiable</label>
+      <textarea data-role="ocr-text" placeholder="Le texte extrait apparaîtra ici. Vous pouvez le corriger avant envoi."></textarea>
+      <div class="actions">
+        <button data-role="extract-btn">Extraire les informations</button>
+      </div>
+      <div class="loading hidden" data-role="api-loading">
+        <div class="spinner"></div>
+        <span>Analyse et détection du type par l'IA en cours...</span>
+      </div>
+      <div data-role="api-error"></div>
+    </div>
+
+    <div class="results-section hidden" data-role="results-section">
+      <div data-role="results-container"></div>
+      <div class="actions">
+        <button class="secondary" data-role="copy-all-btn">Copier tout</button>
+      </div>
+      <div data-role="result-msg"></div>
+    </div>
+  `;
+  documentsContainer.appendChild(card);
+  return card;
+}
+
+async function processFile(file) {
+  const card = createDocumentCard(file);
+
+  const ocrLoading = card.querySelector('[data-role="ocr-loading"]');
+  const ocrErrorDiv = card.querySelector('[data-role="ocr-error"]');
+  const ocrSection = card.querySelector('[data-role="ocr-section"]');
+  const ocrTextArea = card.querySelector('[data-role="ocr-text"]');
+  const extractBtn = card.querySelector('[data-role="extract-btn"]');
+  const apiLoading = card.querySelector('[data-role="api-loading"]');
+  const apiErrorDiv = card.querySelector('[data-role="api-error"]');
+  const resultsSection = card.querySelector('[data-role="results-section"]');
+  const resultsContainer = card.querySelector('[data-role="results-container"]');
+  const resultMsg = card.querySelector('[data-role="result-msg"]');
+  const copyAllBtn = card.querySelector('[data-role="copy-all-btn"]');
+  const typeBadge = card.querySelector('.doc-type-badge');
+
+  // --- OCR ---
   try {
     const fileBase64 = await fileToDataUrl(file);
 
-    ocrStatus.textContent = 'Reconnaissance de texte (OCR) en cours...';
     const response = await fetch('/api/ocr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -411,81 +438,92 @@ async function handleFile(file) {
     }
 
     ocrTextArea.value = (data.text || '').trim();
-    step3.classList.remove('hidden');
+    ocrSection.classList.remove('hidden');
   } catch (err) {
     console.error(err);
     showError(ocrErrorDiv, `Échec de l'OCR : ${err.message || err}`);
+    return;
   } finally {
     ocrLoading.classList.add('hidden');
   }
-}
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Impossible de lire le fichier.'));
-    reader.readAsDataURL(file);
-  });
-}
+  // --- Extraction (avec détection automatique du type) ---
+  extractBtn.addEventListener('click', async () => {
+    clearError(apiErrorDiv);
+    resultMsg.innerHTML = '';
+    resultsSection.classList.add('hidden');
 
-// ---------------------------------------------------------------------
-// Étape 3 : Appel au backend (Vercel) qui interroge Mistral
-// ---------------------------------------------------------------------
-const sendBtn = document.getElementById('sendBtn');
-const apiLoading = document.getElementById('apiLoading');
-const apiErrorDiv = document.getElementById('apiError');
-const resultsContainer = document.getElementById('resultsContainer');
-const resultMsg = document.getElementById('resultMsg');
-
-sendBtn.addEventListener('click', async () => {
-  clearError(apiErrorDiv);
-  resultMsg.innerHTML = '';
-  step4.classList.add('hidden');
-
-  if (!selectedDocType) {
-    showError(apiErrorDiv, "Veuillez sélectionner un type de document (étape 1).");
-    return;
-  }
-  const ocrText = ocrTextArea.value.trim();
-  if (!ocrText) {
-    showError(apiErrorDiv, "Le texte OCR est vide.");
-    return;
-  }
-
-  sendBtn.disabled = true;
-  apiLoading.classList.remove('hidden');
-
-  try {
-    const response = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ docType: selectedDocType, ocrText })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || `Erreur serveur (${response.status})`);
+    const ocrText = ocrTextArea.value.trim();
+    if (!ocrText) {
+      showError(apiErrorDiv, "Le texte OCR est vide.");
+      return;
     }
 
-    renderResults(selectedDocType, data.result);
-    step4.classList.remove('hidden');
-  } catch (err) {
-    console.error(err);
-    showError(apiErrorDiv, `Échec de l'extraction : ${err.message || err}`);
-  } finally {
-    apiLoading.classList.add('hidden');
-    sendBtn.disabled = false;
-  }
-});
+    extractBtn.disabled = true;
+    apiLoading.classList.remove('hidden');
+
+    try {
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ocrText })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `Erreur serveur (${response.status})`);
+      }
+
+      renderTypeBadge(typeBadge, data.docType);
+      renderResults(resultsContainer, resultMsg, data.docType, data.result);
+      resultsSection.classList.remove('hidden');
+    } catch (err) {
+      console.error(err);
+      showError(apiErrorDiv, `Échec de l'extraction : ${err.message || err}`);
+    } finally {
+      apiLoading.classList.add('hidden');
+      extractBtn.disabled = false;
+    }
+  });
+
+  copyAllBtn.addEventListener('click', () => {
+    const lines = [];
+    resultsContainer.querySelectorAll('.result-field').forEach(row => {
+      const label = row.querySelector('label').textContent;
+      const value = row.querySelector('input').value;
+      lines.push(`${label} : ${value}`);
+    });
+    copyToClipboard(lines.join('\n'), copyAllBtn, resultMsg);
+  });
+
+  // Lance directement l'extraction après l'OCR
+  extractBtn.click();
+}
 
 // ---------------------------------------------------------------------
-// Étape 4 : Affichage des résultats
+// Affichage du type détecté et des résultats
 // ---------------------------------------------------------------------
-function renderResults(docType, parsed) {
+function renderTypeBadge(badgeEl, docType) {
+  const schema = DOC_SCHEMAS[docType];
+  badgeEl.classList.remove('hidden', 'unknown');
+  if (schema) {
+    badgeEl.textContent = `Type détecté : ${schema.label}`;
+  } else {
+    badgeEl.textContent = 'Type non reconnu';
+    badgeEl.classList.add('unknown');
+  }
+}
+
+function renderResults(resultsContainer, resultMsg, docType, parsed) {
   const schema = DOC_SCHEMAS[docType];
   resultsContainer.innerHTML = '';
+  resultMsg.innerHTML = '';
+
+  if (!schema) {
+    resultMsg.innerHTML = '<div class="alert alert-warning">Le type de document n\'a pas pu être identifié parmi "Justificatif de domicile", "RIB" ou "CNI". Vérifiez le texte OCR ci-dessus.</div>';
+    return;
+  }
 
   const keys = Object.keys(schema.fields);
   Object.keys(parsed || {}).forEach(k => {
@@ -509,7 +547,6 @@ function renderResults(docType, parsed) {
     input.type = 'text';
     input.readOnly = true;
     input.value = value;
-    input.id = `result-${key}`;
 
     wrap.appendChild(labelEl);
     wrap.appendChild(input);
@@ -524,16 +561,6 @@ function renderResults(docType, parsed) {
     resultsContainer.appendChild(row);
   });
 }
-
-document.getElementById('copyAllBtn').addEventListener('click', () => {
-  const lines = [];
-  resultsContainer.querySelectorAll('.result-field').forEach(row => {
-    const label = row.querySelector('label').textContent;
-    const value = row.querySelector('input').value;
-    lines.push(`${label} : ${value}`);
-  });
-  copyToClipboard(lines.join('\n'), document.getElementById('copyAllBtn'), resultMsg);
-});
 
 async function copyToClipboard(text, btn, msgContainer) {
   try {
