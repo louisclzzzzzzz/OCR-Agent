@@ -236,6 +236,26 @@
   .ocr-section, .results-section {
     margin-top: 14px;
   }
+
+  .upload-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 12px; }
+    .step { padding: 14px; }
+    header h1 { font-size: 1.3rem; }
+    .dropzone { padding: 20px 14px; }
+    .upload-actions { flex-direction: column; }
+    .upload-actions button { width: 100%; }
+    .result-field { flex-wrap: wrap; }
+    .result-field .field-wrap { flex: 1 1 100%; }
+    .result-field .copy-btn { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -249,9 +269,14 @@
   <div class="step">
     <h2 class="step-title"><span class="step-number">1</span> Documents à analyser</h2>
     <div class="dropzone" id="dropzone">
-      <p>Glissez-déposez un ou plusieurs fichiers ici, ou <strong>cliquez pour les choisir</strong></p>
+      <p>Glissez-déposez un ou plusieurs fichiers ici, ou utilisez les boutons ci-dessous</p>
       <p class="hint">Formats acceptés : JPG, PNG, PDF — le type de document (justificatif de domicile, RIB, CNI) est détecté automatiquement pour chaque fichier.</p>
+      <div class="upload-actions">
+        <button type="button" id="chooseFilesBtn">Choisir des fichiers</button>
+        <button type="button" class="secondary" id="takePhotoBtn">📷 Prendre une photo</button>
+      </div>
       <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg,application/pdf" multiple class="hidden">
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
     </div>
     <div id="globalError"></div>
   </div>
@@ -306,10 +331,14 @@ const VALID_FILE_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'application/p
 // ---------------------------------------------------------------------
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
+const cameraInput = document.getElementById('cameraInput');
+const chooseFilesBtn = document.getElementById('chooseFilesBtn');
+const takePhotoBtn = document.getElementById('takePhotoBtn');
 const globalErrorDiv = document.getElementById('globalError');
 const documentsContainer = document.getElementById('documentsContainer');
 
-dropzone.addEventListener('click', () => fileInput.click());
+chooseFilesBtn.addEventListener('click', () => fileInput.click());
+takePhotoBtn.addEventListener('click', () => cameraInput.click());
 
 dropzone.addEventListener('dragover', e => {
   e.preventDefault();
@@ -326,6 +355,10 @@ dropzone.addEventListener('drop', e => {
 fileInput.addEventListener('change', e => {
   if (e.target.files.length) handleFiles(e.target.files);
   fileInput.value = '';
+});
+cameraInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFiles(e.target.files);
+  cameraInput.value = '';
 });
 
 function showError(container, message) {
