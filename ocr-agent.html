@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR Agent — Extraction de documents administratifs</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+  :root {
+    --primary: #1a5276;
+    --primary-light: #2e86c1;
+    --accent: #e67e22;
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --border: #d5dbdb;
+    --text: #2c3e50;
+    --muted: #7f8c8d;
+    --success: #27ae60;
+    --error: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  header h1 {
+    color: var(--primary);
+    margin: 0 0 6px 0;
+    font-size: 1.6rem;
+  }
+  header p {
+    color: var(--muted);
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .step-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px 0;
+    font-size: 1.05rem;
+    color: var(--primary);
+  }
+  .step-number {
+    background: var(--primary);
+    color: #fff;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .field-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .field-row > div {
+    flex: 1 1 220px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+  input[type="text"], input[type="password"], select, textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text);
+  }
+  textarea {
+    resize: vertical;
+    min-height: 140px;
+  }
+  .hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .doc-types {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .doc-type-card {
+    flex: 1 1 200px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  .doc-type-card.selected {
+    border-color: var(--primary-light);
+    background: #eaf2f8;
+    color: var(--primary);
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 6px;
+    padding: 30px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone.dragover {
+    border-color: var(--primary-light);
+    background: #eaf2f8;
+  }
+  .dropzone strong { color: var(--primary); }
+  .file-info {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  button {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 9px 18px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--primary-light); }
+  button:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: #fff;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+  button.secondary:hover { background: #eaf2f8; }
+  .copy-btn {
+    background: var(--accent);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { background: #d35400; }
+  .actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--primary);
+    font-size: 0.9rem;
+    margin-top: 12px;
+  }
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-bar-outer {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-bar-inner {
+    height: 100%;
+    background: var(--primary-light);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .alert {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 5px;
+    font-size: 0.88rem;
+  }
+  .alert-error {
+    background: #fdecea;
+    color: var(--error);
+    border: 1px solid #f5c6c0;
+  }
+  .alert-success {
+    background: #eafaf1;
+    color: var(--success);
+    border: 1px solid #b7e4c7;
+  }
+  .result-field {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .result-field .field-wrap {
+    flex: 1;
+  }
+  .result-field label {
+    margin-bottom: 3px;
+  }
+  .hidden { display: none !important; }
+  .step.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Extraction de documents administratifs — Agent HUB IA SMA</h1>
+    <p>OCR local (Tesseract.js) + extraction structurée via l'agent IA SMA BTP</p>
+  </header>
+
+  <!-- Étape 1 : Configuration -->
+  <div class="step">
+    <h2 class="step-title"><span class="step-number">1</span> Configuration de l'agent</h2>
+    <div class="field-row">
+      <div>
+        <label for="chatbotId">ID du chatbot</label>
+        <input type="text" id="chatbotId" placeholder="ex: 1234abcd-...">
+      </div>
+      <div>
+        <label for="apiKey">Clé API</label>
+        <input type="password" id="apiKey" placeholder="Bearer token">
+      </div>
+    </div>
+    <p class="hint">Ces informations restent uniquement en mémoire dans votre navigateur (jamais enregistrées).</p>
+  </div>
+
+  <!-- Étape 2 : Type de document -->
+  <div class="step">
+    <h2 class="step-title"><span class="step-number">2</span> Type de document</h2>
+    <div class="doc-types" id="docTypes">
+      <div class="doc-type-card" data-type="domicile">Justificatif de domicile</div>
+      <div class="doc-type-card" data-type="rib">RIB</div>
+      <div class="doc-type-card" data-type="cni">CNI / Carte d'identité</div>
+    </div>
+  </div>
+
+  <!-- Étape 3 : Upload -->
+  <div class="step">
+    <h2 class="step-title"><span class="step-number">3</span> Document à analyser</h2>
+    <div class="dropzone" id="dropzone">
+      <p>Glissez-déposez votre fichier ici, ou <strong>cliquez pour choisir un fichier</strong></p>
+      <p class="hint">Formats acceptés : JPG, PNG, PDF</p>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg,application/pdf" class="hidden">
+    </div>
+    <div class="file-info" id="fileInfo"></div>
+    <div class="loading hidden" id="ocrLoading">
+      <div class="spinner"></div>
+      <div class="progress-bar-outer"><div class="progress-bar-inner" id="ocrProgressBar"></div></div>
+      <span id="ocrStatus">Analyse en cours...</span>
+    </div>
+    <div id="ocrError"></div>
+  </div>
+
+  <!-- Étape 4 : Texte OCR -->
+  <div class="step hidden" id="step4">
+    <h2 class="step-title"><span class="step-number">4</span> Texte extrait (OCR) — modifiable</h2>
+    <textarea id="ocrText" placeholder="Le texte extrait apparaîtra ici. Vous pouvez le corriger avant envoi."></textarea>
+    <div class="actions">
+      <button id="sendBtn">Extraire les informations</button>
+    </div>
+    <div class="loading hidden" id="apiLoading">
+      <div class="spinner"></div>
+      <span>Appel de l'agent HUB IA en cours...</span>
+    </div>
+    <div id="apiError"></div>
+  </div>
+
+  <!-- Étape 5 : Résultats -->
+  <div class="step hidden" id="step5">
+    <h2 class="step-title"><span class="step-number">5</span> Informations extraites</h2>
+    <div id="resultsContainer"></div>
+    <div class="actions">
+      <button class="secondary" id="copyAllBtn">Copier tout</button>
+    </div>
+    <div id="resultMsg"></div>
+  </div>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------
+// Configuration (mémoire JS uniquement)
+// ---------------------------------------------------------------------
+const config = {
+  chatbotId: '',
+  apiKey: ''
+};
+document.getElementById('chatbotId').addEventListener('input', e => config.chatbotId = e.target.value.trim());
+document.getElementById('apiKey').addEventListener('input', e => config.apiKey = e.target.value.trim());
+
+// ---------------------------------------------------------------------
+// Schémas et libellés par type de document
+// ---------------------------------------------------------------------
+const DOC_SCHEMAS = {
+  domicile: {
+    label: 'Justificatif de domicile',
+    fields: {
+      nom: 'Nom',
+      prenom: 'Prénom',
+      adresse: 'Adresse',
+      code_postal: 'Code postal',
+      ville: 'Ville',
+      date_document: 'Date du document'
+    }
+  },
+  rib: {
+    label: 'RIB',
+    fields: {
+      titulaire: 'Titulaire du compte',
+      iban: 'IBAN',
+      bic: 'BIC',
+      nom_banque: 'Nom de la banque'
+    }
+  },
+  cni: {
+    label: "CNI / Carte d'identité",
+    fields: {
+      nom: 'Nom',
+      prenom: 'Prénom',
+      date_naissance: 'Date de naissance',
+      lieu_naissance: 'Lieu de naissance',
+      numero_document: 'Numéro de document',
+      date_expiration: "Date d'expiration"
+    }
+  }
+};
+
+let selectedDocType = null;
+
+document.querySelectorAll('.doc-type-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.doc-type-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedDocType = card.dataset.type;
+  });
+});
+
+// ---------------------------------------------------------------------
+// Étape 3 : Upload + OCR
+// ---------------------------------------------------------------------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const ocrLoading = document.getElementById('ocrLoading');
+const ocrProgressBar = document.getElementById('ocrProgressBar');
+const ocrStatus = document.getElementById('ocrStatus');
+const ocrErrorDiv = document.getElementById('ocrError');
+const step4 = document.getElementById('step4');
+const step5 = document.getElementById('step5');
+const ocrTextArea = document.getElementById('ocrText');
+
+dropzone.addEventListener('click', () => fileInput.click());
+
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function showError(container, message) {
+  container.innerHTML = `<div class="alert alert-error">${escapeHtml(message)}</div>`;
+}
+function clearError(container) {
+  container.innerHTML = '';
+}
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function handleFile(file) {
+  clearError(ocrErrorDiv);
+  step4.classList.add('hidden');
+  step5.classList.add('hidden');
+
+  if (!selectedDocType) {
+    showError(ocrErrorDiv, "Veuillez d'abord sélectionner un type de document (étape 2).");
+    return;
+  }
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+  if (!validTypes.includes(file.type)) {
+    showError(ocrErrorDiv, "Format de fichier non supporté. Utilisez JPG, PNG ou PDF.");
+    return;
+  }
+
+  fileInfo.textContent = `Fichier sélectionné : ${file.name} (${(file.size / 1024).toFixed(1)} Ko)`;
+
+  ocrLoading.classList.remove('hidden');
+  ocrProgressBar.style.width = '0%';
+  ocrStatus.textContent = 'Préparation...';
+
+  try {
+    let imageSource;
+    if (file.type === 'application/pdf') {
+      ocrStatus.textContent = 'Conversion du PDF en image...';
+      imageSource = await pdfFirstPageToCanvas(file);
+    } else {
+      imageSource = file;
+    }
+
+    ocrStatus.textContent = 'Reconnaissance de texte (OCR) en cours...';
+    const text = await runOcr(imageSource, progress => {
+      ocrProgressBar.style.width = `${Math.round(progress * 100)}%`;
+      ocrStatus.textContent = `Reconnaissance de texte (OCR) en cours... ${Math.round(progress * 100)}%`;
+    });
+
+    ocrTextArea.value = text.trim();
+    step4.classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    showError(ocrErrorDiv, `Échec de l'OCR : ${err.message || err}`);
+  } finally {
+    ocrLoading.classList.add('hidden');
+  }
+}
+
+async function pdfFirstPageToCanvas(file) {
+  if (!window.pdfjsLib) {
+    throw new Error('pdf.js non disponible (vérifiez votre connexion internet pour charger le CDN).');
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+  const scale = 2;
+  const viewport = page.getViewport({ scale });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+async function runOcr(source, onProgress) {
+  if (!window.Tesseract) {
+    throw new Error('Tesseract.js non disponible (vérifiez votre connexion internet pour charger le CDN).');
+  }
+  const result = await Tesseract.recognize(source, 'fra', {
+    logger: m => {
+      if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+        onProgress(m.progress);
+      }
+    }
+  });
+  return result.data.text;
+}
+
+// ---------------------------------------------------------------------
+// Étape 4 : Appel à l'agent HUB IA SMA
+// ---------------------------------------------------------------------
+const sendBtn = document.getElementById('sendBtn');
+const apiLoading = document.getElementById('apiLoading');
+const apiErrorDiv = document.getElementById('apiError');
+const resultsContainer = document.getElementById('resultsContainer');
+const resultMsg = document.getElementById('resultMsg');
+
+sendBtn.addEventListener('click', async () => {
+  clearError(apiErrorDiv);
+  resultMsg.innerHTML = '';
+  step5.classList.add('hidden');
+
+  if (!config.chatbotId || !config.apiKey) {
+    showError(apiErrorDiv, "Veuillez renseigner l'ID du chatbot et la clé API (étape 1).");
+    return;
+  }
+  if (!selectedDocType) {
+    showError(apiErrorDiv, "Veuillez sélectionner un type de document (étape 2).");
+    return;
+  }
+  const ocrText = ocrTextArea.value.trim();
+  if (!ocrText) {
+    showError(apiErrorDiv, "Le texte OCR est vide.");
+    return;
+  }
+
+  const prompt = buildPrompt(selectedDocType, ocrText);
+
+  sendBtn.disabled = true;
+  apiLoading.classList.remove('hidden');
+
+  try {
+    const url = `https://jpm.tech.sma.lan/api/chatbot/${encodeURIComponent(config.chatbotId)}/invoke`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: JSON.stringify({
+        chatHistory: [],
+        query: prompt
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Réponse HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rawText = extractAgentText(data);
+    const parsed = extractJson(rawText);
+
+    if (!parsed) {
+      throw new Error("La réponse de l'agent ne contient pas de JSON valide.\n\nRéponse brute :\n" + rawText);
+    }
+
+    renderResults(selectedDocType, parsed);
+    step5.classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    let message = err.message || String(err);
+    if (err instanceof TypeError) {
+      message = "Impossible de contacter l'agent HUB IA SMA. Vérifiez que vous êtes connecté au réseau interne SMA BTP, et que l'ID du chatbot / la clé API sont corrects. (Erreur réseau / CORS : " + message + ")";
+    }
+    showError(apiErrorDiv, message);
+  } finally {
+    apiLoading.classList.add('hidden');
+    sendBtn.disabled = false;
+  }
+});
+
+function buildPrompt(docType, ocrText) {
+  const schema = DOC_SCHEMAS[docType];
+  const schemaObj = {};
+  Object.keys(schema.fields).forEach(key => schemaObj[key] = "");
+
+  return `Voici le texte brut extrait par OCR à partir d'un document de type "${schema.label}" :
+
+"""
+${ocrText}
+"""
+
+Analyse ce texte et extrait les informations demandées. Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après, sans bloc de code, en respectant exactement ce schéma (mêmes clés, mêmes noms) :
+
+${JSON.stringify(schemaObj, null, 2)}
+
+Règles :
+- Si une information est absente, illisible ou non présente dans le texte, mets une chaîne vide "" pour la clé correspondante.
+- N'ajoute aucune clé supplémentaire.
+- Ne mets aucun commentaire ni explication.
+- Réponds uniquement avec l'objet JSON.`;
+}
+
+function extractAgentText(data) {
+  if (typeof data === 'string') return data;
+  if (data == null) return '';
+  // Tentatives sur les champs les plus courants pour ce type d'API
+  const candidates = [
+    data.response,
+    data.answer,
+    data.text,
+    data.message,
+    data.result,
+    data.output,
+    data.content
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length) return c;
+  }
+  // Cas où un des champs ci-dessus est lui-même un objet avec un sous-champ texte
+  for (const c of candidates) {
+    if (c && typeof c === 'object') {
+      const nested = extractAgentText(c);
+      if (nested) return nested;
+    }
+  }
+  return JSON.stringify(data);
+}
+
+function extractJson(text) {
+  if (!text) return null;
+  // Retire les éventuels ```json ... ``` ou ``` ... ```
+  let cleaned = text.trim();
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  // Essai direct
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // continue
+  }
+
+  // Recherche du premier bloc { ... } équilibré dans le texte
+  const start = cleaned.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        const candidate = cleaned.slice(start, i + 1);
+        try {
+          return JSON.parse(candidate);
+        } catch (e) {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------
+// Étape 5 : Affichage des résultats
+// ---------------------------------------------------------------------
+function renderResults(docType, parsed) {
+  const schema = DOC_SCHEMAS[docType];
+  resultsContainer.innerHTML = '';
+
+  // Affiche les champs du schéma attendu (dans l'ordre), puis d'éventuelles clés supplémentaires
+  const keys = Object.keys(schema.fields);
+  Object.keys(parsed).forEach(k => {
+    if (!keys.includes(k)) keys.push(k);
+  });
+
+  keys.forEach(key => {
+    const label = schema.fields[key] || key;
+    const value = parsed[key] != null ? String(parsed[key]) : '';
+
+    const row = document.createElement('div');
+    row.className = 'result-field';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'field-wrap';
+
+    const labelEl = document.createElement('label');
+    labelEl.textContent = label;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = value;
+    input.id = `result-${key}`;
+
+    wrap.appendChild(labelEl);
+    wrap.appendChild(input);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = 'Copier';
+    copyBtn.addEventListener('click', () => copyToClipboard(value, copyBtn));
+
+    row.appendChild(wrap);
+    row.appendChild(copyBtn);
+    resultsContainer.appendChild(row);
+  });
+}
+
+document.getElementById('copyAllBtn').addEventListener('click', () => {
+  const lines = [];
+  resultsContainer.querySelectorAll('.result-field').forEach(row => {
+    const label = row.querySelector('label').textContent;
+    const value = row.querySelector('input').value;
+    lines.push(`${label} : ${value}`);
+  });
+  copyToClipboard(lines.join('\n'), document.getElementById('copyAllBtn'), resultMsg);
+});
+
+async function copyToClipboard(text, btn, msgContainer) {
+  try {
+    await navigator.clipboard.writeText(text);
+    if (msgContainer) {
+      msgContainer.innerHTML = '<div class="alert alert-success">Copié dans le presse-papier.</div>';
+      setTimeout(() => msgContainer.innerHTML = '', 2000);
+    } else if (btn) {
+      const original = btn.textContent;
+      btn.textContent = 'Copié !';
+      setTimeout(() => btn.textContent = original, 1200);
+    }
+  } catch (err) {
+    if (msgContainer) {
+      showError(msgContainer, "Impossible de copier dans le presse-papier.");
+    }
+  }
+}
+</script>
+</body>
+</html>
