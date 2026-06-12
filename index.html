@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OCR Agent — Extraction de documents administratifs (Mistral)</title>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   :root {
     --primary: #1a5276;
@@ -193,19 +191,6 @@
     flex-shrink: 0;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .progress-bar-outer {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .progress-bar-inner {
-    height: 100%;
-    background: var(--primary-light);
-    width: 0%;
-    transition: width 0.2s;
-  }
   .alert {
     margin-top: 12px;
     padding: 10px 14px;
@@ -242,7 +227,7 @@
 <div class="container">
   <header>
     <h1>Extraction de documents administratifs</h1>
-    <p>OCR local (Tesseract.js) + extraction structurée via l'API Mistral</p>
+    <p>OCR et extraction structurée via l'API Mistral (mistral-ocr-2512)</p>
   </header>
 
   <!-- Étape 1 : Type de document -->
@@ -266,7 +251,6 @@
     <div class="file-info" id="fileInfo"></div>
     <div class="loading hidden" id="ocrLoading">
       <div class="spinner"></div>
-      <div class="progress-bar-outer"><div class="progress-bar-inner" id="ocrProgressBar"></div></div>
       <span id="ocrStatus">Analyse en cours...</span>
     </div>
     <div id="ocrError"></div>
@@ -353,7 +337,6 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const fileInfo = document.getElementById('fileInfo');
 const ocrLoading = document.getElementById('ocrLoading');
-const ocrProgressBar = document.getElementById('ocrProgressBar');
 const ocrStatus = document.getElementById('ocrStatus');
 const ocrErrorDiv = document.getElementById('ocrError');
 const step3 = document.getElementById('step3');
@@ -409,25 +392,25 @@ async function handleFile(file) {
   fileInfo.textContent = `Fichier sélectionné : ${file.name} (${(file.size / 1024).toFixed(1)} Ko)`;
 
   ocrLoading.classList.remove('hidden');
-  ocrProgressBar.style.width = '0%';
-  ocrStatus.textContent = 'Préparation...';
+  ocrStatus.textContent = 'Lecture du fichier...';
 
   try {
-    let imageSource;
-    if (file.type === 'application/pdf') {
-      ocrStatus.textContent = 'Conversion du PDF en image...';
-      imageSource = await pdfFirstPageToCanvas(file);
-    } else {
-      imageSource = file;
-    }
+    const fileBase64 = await fileToDataUrl(file);
 
     ocrStatus.textContent = 'Reconnaissance de texte (OCR) en cours...';
-    const text = await runOcr(imageSource, progress => {
-      ocrProgressBar.style.width = `${Math.round(progress * 100)}%`;
-      ocrStatus.textContent = `Reconnaissance de texte (OCR) en cours... ${Math.round(progress * 100)}%`;
+    const response = await fetch('/api/ocr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileBase64, mimeType: file.type })
     });
 
-    ocrTextArea.value = text.trim();
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erreur serveur (${response.status})`);
+    }
+
+    ocrTextArea.value = (data.text || '').trim();
     step3.classList.remove('hidden');
   } catch (err) {
     console.error(err);
@@ -437,39 +420,13 @@ async function handleFile(file) {
   }
 }
 
-async function pdfFirstPageToCanvas(file) {
-  if (!window.pdfjsLib) {
-    throw new Error('pdf.js non disponible (vérifiez votre connexion internet pour charger le CDN).');
-  }
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const page = await pdf.getPage(1);
-  const scale = 2;
-  const viewport = page.getViewport({ scale });
-
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas;
-}
-
-async function runOcr(source, onProgress) {
-  if (!window.Tesseract) {
-    throw new Error('Tesseract.js non disponible (vérifiez votre connexion internet pour charger le CDN).');
-  }
-  const result = await Tesseract.recognize(source, 'fra', {
-    logger: m => {
-      if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-        onProgress(m.progress);
-      }
-    }
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Impossible de lire le fichier.'));
+    reader.readAsDataURL(file);
   });
-  return result.data.text;
 }
 
 // ---------------------------------------------------------------------
