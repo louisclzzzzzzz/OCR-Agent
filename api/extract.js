@@ -29,6 +29,42 @@ const DOC_SCHEMAS = {
       numero_document: "Numéro du document d'identité",
       date_expiration: "Date d'expiration (telle qu'écrite, ex JJ/MM/AAAA)"
     }
+  },
+  permis: {
+    label: 'permis de conduire',
+    fields: {
+      nom: 'Nom de famille',
+      prenom: 'Prénom(s)',
+      date_naissance: 'Date de naissance (telle qu\'écrite, ex JJ/MM/AAAA)',
+      lieu_naissance: 'Lieu de naissance',
+      numero_permis: 'Numéro du permis de conduire',
+      date_delivrance: "Date de délivrance du permis (telle qu'écrite, ex JJ/MM/AAAA)",
+      categories: "Catégories de permis obtenues (ex: A, B, B1...), séparées par des virgules"
+    }
+  },
+  passeport: {
+    label: 'passeport',
+    fields: {
+      nom: 'Nom de famille',
+      prenom: 'Prénom(s)',
+      date_naissance: 'Date de naissance (telle qu\'écrite, ex JJ/MM/AAAA)',
+      lieu_naissance: 'Lieu de naissance',
+      nationalite: 'Nationalité',
+      numero_passeport: 'Numéro du passeport',
+      date_expiration: "Date d'expiration (telle qu'écrite, ex JJ/MM/AAAA)"
+    }
+  },
+  kbis: {
+    label: "extrait Kbis (entreprise)",
+    fields: {
+      denomination: "Dénomination ou raison sociale de l'entreprise",
+      forme_juridique: "Forme juridique (SARL, SAS, EURL, etc.)",
+      siren: 'Numéro SIREN',
+      siret: 'Numéro SIRET du siège',
+      adresse_siege: 'Adresse du siège social',
+      date_immatriculation: "Date d'immatriculation (telle qu'écrite, ex JJ/MM/AAAA)",
+      representant_legal: 'Nom et prénom du représentant légal (gérant, président...)'
+    }
   }
 };
 

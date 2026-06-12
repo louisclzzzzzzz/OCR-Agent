@@ -91,7 +91,7 @@
   }
   textarea {
     resize: vertical;
-    min-height: 140px;
+    min-height: 120px;
   }
   .hint {
     font-size: 0.78rem;
@@ -134,6 +134,10 @@
     border: 1px solid var(--primary);
   }
   button.secondary:hover { background: #eaf2f8; }
+  button.secondary:disabled {
+    background: #fff;
+    border-color: var(--border);
+  }
   .copy-btn {
     background: var(--accent);
     padding: 6px 12px;
@@ -207,15 +211,11 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+    margin-bottom: 4px;
   }
-  .doc-filename {
+  .doc-card-title {
     font-weight: 600;
     color: var(--text);
-    word-break: break-all;
-  }
-  .doc-size {
-    font-size: 0.78rem;
-    color: var(--muted);
   }
   .doc-type-badge {
     margin-left: auto;
@@ -233,8 +233,41 @@
     color: #9a6b1c;
     border-color: #fbe3b5;
   }
-  .ocr-section, .results-section {
+  .results-section {
     margin-top: 14px;
+  }
+
+  .doc-page {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+  }
+  .doc-page-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .doc-page-label {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .doc-page-filename {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .doc-page-size {
+    font-size: 0.78rem;
+    color: var(--muted);
   }
 
   .upload-actions {
@@ -270,7 +303,7 @@
     <h2 class="step-title"><span class="step-number">1</span> Documents à analyser</h2>
     <div class="dropzone" id="dropzone">
       <p>Glissez-déposez un ou plusieurs fichiers ici, ou utilisez les boutons ci-dessous</p>
-      <p class="hint">Formats acceptés : JPG, PNG, PDF — le type de document (justificatif de domicile, RIB, CNI) est détecté automatiquement pour chaque fichier.</p>
+      <p class="hint">Formats acceptés : JPG, PNG, PDF — type détecté automatiquement (justificatif de domicile, RIB, CNI, permis de conduire, passeport, Kbis...). Pour les documents recto/verso, ajoutez le verso depuis la fiche du document.</p>
       <div class="upload-actions">
         <button type="button" id="chooseFilesBtn">Choisir des fichiers</button>
         <button type="button" class="secondary" id="takePhotoBtn">📷 Prendre une photo</button>
@@ -320,6 +353,42 @@ const DOC_SCHEMAS = {
       lieu_naissance: 'Lieu de naissance',
       numero_document: 'Numéro de document',
       date_expiration: "Date d'expiration"
+    }
+  },
+  permis: {
+    label: 'Permis de conduire',
+    fields: {
+      nom: 'Nom',
+      prenom: 'Prénom',
+      date_naissance: 'Date de naissance',
+      lieu_naissance: 'Lieu de naissance',
+      numero_permis: 'Numéro de permis',
+      date_delivrance: 'Date de délivrance',
+      categories: 'Catégories'
+    }
+  },
+  passeport: {
+    label: 'Passeport',
+    fields: {
+      nom: 'Nom',
+      prenom: 'Prénom',
+      date_naissance: 'Date de naissance',
+      lieu_naissance: 'Lieu de naissance',
+      nationalite: 'Nationalité',
+      numero_passeport: 'Numéro de passeport',
+      date_expiration: "Date d'expiration"
+    }
+  },
+  kbis: {
+    label: 'Extrait Kbis',
+    fields: {
+      denomination: 'Dénomination / Raison sociale',
+      forme_juridique: 'Forme juridique',
+      siren: 'SIREN',
+      siret: 'SIRET',
+      adresse_siege: 'Adresse du siège',
+      date_immatriculation: "Date d'immatriculation",
+      representant_legal: 'Représentant légal'
     }
   }
 };
@@ -382,12 +451,9 @@ function handleFiles(fileList) {
     showError(globalErrorDiv, `Format non supporté pour : ${invalid.map(f => f.name).join(', ')}. Utilisez JPG, PNG ou PDF.`);
   }
 
-  files.filter(f => VALID_FILE_TYPES.includes(f.type)).forEach(processFile);
+  files.filter(f => VALID_FILE_TYPES.includes(f.type)).forEach(file => createDocumentCard(file));
 }
 
-// ---------------------------------------------------------------------
-// Traitement d'un document : OCR puis extraction (type auto-détecté)
-// ---------------------------------------------------------------------
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -397,64 +463,45 @@ function fileToDataUrl(file) {
   });
 }
 
-function createDocumentCard(file) {
-  const card = document.createElement('div');
-  card.className = 'step';
-  card.innerHTML = `
-    <div class="doc-card-header">
-      <span class="doc-filename">${escapeHtml(file.name)}</span>
-      <span class="doc-size">(${(file.size / 1024).toFixed(1)} Ko)</span>
-      <span class="doc-type-badge hidden"></span>
+// ---------------------------------------------------------------------
+// Carte d'un document (recto + verso optionnel) et OCR de chaque page
+// ---------------------------------------------------------------------
+function createPageSection(label) {
+  const page = document.createElement('div');
+  page.className = 'doc-page';
+  page.dataset.pageLabel = label;
+  page.innerHTML = `
+    <div class="doc-page-header">
+      <span class="doc-page-label">${escapeHtml(label)}</span>
+      <span class="doc-page-filename"></span>
+      <span class="doc-page-size"></span>
     </div>
-
     <div class="loading" data-role="ocr-loading">
       <div class="spinner"></div>
       <span>Reconnaissance de texte (OCR) en cours...</span>
     </div>
     <div data-role="ocr-error"></div>
-
-    <div class="ocr-section hidden" data-role="ocr-section">
+    <div class="hidden" data-role="ocr-wrap">
       <label>Texte extrait (OCR) — modifiable</label>
       <textarea data-role="ocr-text" placeholder="Le texte extrait apparaîtra ici. Vous pouvez le corriger avant envoi."></textarea>
-      <div class="actions">
-        <button data-role="extract-btn">Extraire les informations</button>
-      </div>
-      <div class="loading hidden" data-role="api-loading">
-        <div class="spinner"></div>
-        <span>Analyse et détection du type par l'IA en cours...</span>
-      </div>
-      <div data-role="api-error"></div>
-    </div>
-
-    <div class="results-section hidden" data-role="results-section">
-      <div data-role="results-container"></div>
-      <div class="actions">
-        <button class="secondary" data-role="copy-all-btn">Copier tout</button>
-      </div>
-      <div data-role="result-msg"></div>
     </div>
   `;
-  documentsContainer.appendChild(card);
-  return card;
+  return page;
 }
 
-async function processFile(file) {
-  const card = createDocumentCard(file);
+async function runOcrForPage(pageEl, file) {
+  const filenameEl = pageEl.querySelector('.doc-page-filename');
+  const sizeEl = pageEl.querySelector('.doc-page-size');
+  const ocrLoading = pageEl.querySelector('[data-role="ocr-loading"]');
+  const ocrErrorDiv = pageEl.querySelector('[data-role="ocr-error"]');
+  const ocrWrap = pageEl.querySelector('[data-role="ocr-wrap"]');
+  const ocrTextArea = pageEl.querySelector('[data-role="ocr-text"]');
 
-  const ocrLoading = card.querySelector('[data-role="ocr-loading"]');
-  const ocrErrorDiv = card.querySelector('[data-role="ocr-error"]');
-  const ocrSection = card.querySelector('[data-role="ocr-section"]');
-  const ocrTextArea = card.querySelector('[data-role="ocr-text"]');
-  const extractBtn = card.querySelector('[data-role="extract-btn"]');
-  const apiLoading = card.querySelector('[data-role="api-loading"]');
-  const apiErrorDiv = card.querySelector('[data-role="api-error"]');
-  const resultsSection = card.querySelector('[data-role="results-section"]');
-  const resultsContainer = card.querySelector('[data-role="results-container"]');
-  const resultMsg = card.querySelector('[data-role="result-msg"]');
-  const copyAllBtn = card.querySelector('[data-role="copy-all-btn"]');
-  const typeBadge = card.querySelector('.doc-type-badge');
+  filenameEl.textContent = file.name;
+  sizeEl.textContent = `(${(file.size / 1024).toFixed(1)} Ko)`;
+  ocrLoading.classList.remove('hidden');
+  clearError(ocrErrorDiv);
 
-  // --- OCR ---
   try {
     const fileBase64 = await fileToDataUrl(file);
 
@@ -471,22 +518,120 @@ async function processFile(file) {
     }
 
     ocrTextArea.value = (data.text || '').trim();
-    ocrSection.classList.remove('hidden');
+    ocrWrap.classList.remove('hidden');
+    return true;
   } catch (err) {
     console.error(err);
     showError(ocrErrorDiv, `Échec de l'OCR : ${err.message || err}`);
-    return;
+    return false;
   } finally {
     ocrLoading.classList.add('hidden');
   }
+}
 
-  // --- Extraction (avec détection automatique du type) ---
+function getCombinedOcrText(pagesContainer) {
+  return Array.from(pagesContainer.querySelectorAll('.doc-page')).map(page => {
+    const label = page.dataset.pageLabel;
+    const text = page.querySelector('[data-role="ocr-text"]').value.trim();
+    return `--- ${label} ---\n${text}`;
+  }).join('\n\n');
+}
+
+function createDocumentCard(rectoFile) {
+  const card = document.createElement('div');
+  card.className = 'step';
+  card.innerHTML = `
+    <div class="doc-card-header">
+      <span class="doc-card-title">Document</span>
+      <span class="doc-type-badge hidden"></span>
+    </div>
+
+    <div data-role="pages-container"></div>
+
+    <div class="actions" data-role="verso-actions">
+      <span class="hint">Document recto/verso ?</span>
+      <button type="button" class="secondary" data-role="add-verso-file-btn">Ajouter le verso (fichier)</button>
+      <button type="button" class="secondary" data-role="add-verso-photo-btn">📷 Ajouter le verso (photo)</button>
+    </div>
+    <input type="file" data-role="verso-file-input" accept="image/jpeg,image/png,image/jpg,application/pdf" class="hidden">
+    <input type="file" data-role="verso-camera-input" accept="image/*" capture="environment" class="hidden">
+    <div data-role="verso-error"></div>
+
+    <div class="actions">
+      <button data-role="extract-btn" disabled>Confirmer et extraire les informations</button>
+    </div>
+    <div class="loading hidden" data-role="api-loading">
+      <div class="spinner"></div>
+      <span>Analyse et détection du type par l'IA en cours...</span>
+    </div>
+    <div data-role="api-error"></div>
+
+    <div class="results-section hidden" data-role="results-section">
+      <div data-role="results-container"></div>
+      <div class="actions">
+        <button class="secondary" data-role="copy-all-btn">Copier tout</button>
+      </div>
+      <div data-role="result-msg"></div>
+    </div>
+  `;
+  documentsContainer.appendChild(card);
+
+  const pagesContainer = card.querySelector('[data-role="pages-container"]');
+  const versoActions = card.querySelector('[data-role="verso-actions"]');
+  const addVersoFileBtn = card.querySelector('[data-role="add-verso-file-btn"]');
+  const addVersoPhotoBtn = card.querySelector('[data-role="add-verso-photo-btn"]');
+  const versoFileInput = card.querySelector('[data-role="verso-file-input"]');
+  const versoCameraInput = card.querySelector('[data-role="verso-camera-input"]');
+  const versoErrorDiv = card.querySelector('[data-role="verso-error"]');
+  const extractBtn = card.querySelector('[data-role="extract-btn"]');
+  const apiLoading = card.querySelector('[data-role="api-loading"]');
+  const apiErrorDiv = card.querySelector('[data-role="api-error"]');
+  const resultsSection = card.querySelector('[data-role="results-section"]');
+  const resultsContainer = card.querySelector('[data-role="results-container"]');
+  const resultMsg = card.querySelector('[data-role="result-msg"]');
+  const copyAllBtn = card.querySelector('[data-role="copy-all-btn"]');
+  const typeBadge = card.querySelector('.doc-type-badge');
+
+  // --- Recto ---
+  const rectoPage = createPageSection('Recto');
+  pagesContainer.appendChild(rectoPage);
+  runOcrForPage(rectoPage, rectoFile).then(ok => {
+    if (ok) extractBtn.disabled = false;
+  });
+
+  // --- Verso (optionnel) ---
+  const handleVersoFile = async (file) => {
+    clearError(versoErrorDiv);
+    if (!VALID_FILE_TYPES.includes(file.type)) {
+      showError(versoErrorDiv, "Format non supporté. Utilisez JPG, PNG ou PDF.");
+      return;
+    }
+    versoActions.classList.add('hidden');
+    const versoPage = createPageSection('Verso');
+    pagesContainer.appendChild(versoPage);
+    extractBtn.disabled = true;
+    const ok = await runOcrForPage(versoPage, file);
+    extractBtn.disabled = !ok;
+  };
+
+  addVersoFileBtn.addEventListener('click', () => versoFileInput.click());
+  addVersoPhotoBtn.addEventListener('click', () => versoCameraInput.click());
+  versoFileInput.addEventListener('change', e => {
+    if (e.target.files.length) handleVersoFile(e.target.files[0]);
+    versoFileInput.value = '';
+  });
+  versoCameraInput.addEventListener('change', e => {
+    if (e.target.files.length) handleVersoFile(e.target.files[0]);
+    versoCameraInput.value = '';
+  });
+
+  // --- Confirmation et extraction (avec détection automatique du type) ---
   extractBtn.addEventListener('click', async () => {
     clearError(apiErrorDiv);
     resultMsg.innerHTML = '';
     resultsSection.classList.add('hidden');
 
-    const ocrText = ocrTextArea.value.trim();
+    const ocrText = getCombinedOcrText(pagesContainer).trim();
     if (!ocrText) {
       showError(apiErrorDiv, "Le texte OCR est vide.");
       return;
@@ -530,8 +675,7 @@ async function processFile(file) {
     copyToClipboard(lines.join('\n'), copyAllBtn, resultMsg);
   });
 
-  // Lance directement l'extraction après l'OCR
-  extractBtn.click();
+  return card;
 }
 
 // ---------------------------------------------------------------------
@@ -554,7 +698,7 @@ function renderResults(resultsContainer, resultMsg, docType, parsed) {
   resultMsg.innerHTML = '';
 
   if (!schema) {
-    resultMsg.innerHTML = '<div class="alert alert-warning">Le type de document n\'a pas pu être identifié parmi "Justificatif de domicile", "RIB" ou "CNI". Vérifiez le texte OCR ci-dessus.</div>';
+    resultMsg.innerHTML = '<div class="alert alert-warning">Le type de document n\'a pas pu être identifié. Vérifiez le texte OCR ci-dessus.</div>';
     return;
   }
 
