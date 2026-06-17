@@ -1,0 +1,50 @@
+name: Test OCR Agent on data-synth dataset
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout OCR Agent
+        uses: actions/checkout@v4
+        with:
+          path: OCR-Agent
+
+      - name: Checkout data-synth (private dataset)
+        uses: actions/checkout@v4
+        with:
+          repository: louisclzzzzzzz/admin-data-generator
+          token: ${{ secrets.DATA_SYNTH_PAT }}
+          path: data-synth
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run OCR + extraction on the rib/justif dataset
+        working-directory: OCR-Agent
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: node test/run_ocr_test.cjs
+
+      - name: Score against ground truth
+        working-directory: OCR-Agent
+        run: node test/score_results.cjs | tee /tmp/score_report.txt
+
+      - name: Write summary
+        run: |
+          echo '### Résultats OCR Agent vs ground truth' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 3 /tmp/score_report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-agent-results
+          path: |
+            OCR-Agent/test/results.json
+            /tmp/score_report.txt
