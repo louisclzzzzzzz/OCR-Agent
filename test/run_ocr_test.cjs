@@ -18,7 +18,7 @@ const extractHandler = require('../api/extract.js');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data-synth', 'dataset');
 const annotations = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'annotations_ocr.json'), 'utf8'))
-  .filter(a => a.type === 'rib' || a.type === 'justif_domicile');
+  .filter(a => a.type === 'rib' || a.type === 'justif_domicile' || a.face === 'recto' || a.face === 'recto_verso');
 
 function mockReqRes(body) {
   const req = { method: 'POST', body };
@@ -57,7 +57,9 @@ async function main() {
   const results = [];
   for (const item of items) {
     const filePath = path.join(DATA_DIR, item.file);
-    console.log(`\n=== ${item.file} (type attendu: ${item.type}, difficulté: ${item.difficulty}) ===`);
+    const expectedType = item.type || `cni_${item.face}`; // 'rib' | 'justif_domicile' | 'cni_recto' | 'cni_recto_verso'
+    const groundTruth = item.ground_truth || item.ocr_ground_truth;
+    console.log(`\n=== ${item.file} (type attendu: ${expectedType}, difficulté: ${item.difficulty}) ===`);
 
     const { dataUrl, mime } = fileToDataUrl(filePath);
 
@@ -79,16 +81,19 @@ async function main() {
 
     const detectedType = extractRes.body.docType;
     const fields = extractRes.body.result;
-    console.log(`  Type détecté: ${detectedType} (attendu mappé: ${item.type === 'justif_domicile' ? 'domicile' : item.type})`);
+    const expectedMapped = expectedType === 'justif_domicile' ? 'domicile'
+      : expectedType.startsWith('cni') ? 'cni'
+      : expectedType;
+    console.log(`  Type détecté: ${detectedType} (attendu mappé: ${expectedMapped})`);
     console.log('  Champs extraits:', JSON.stringify(fields, null, 2));
 
     results.push({
       file: item.file,
-      expectedType: item.type,
+      expectedType,
       detectedType,
       ocrText,
       fields,
-      groundTruth: item.ground_truth
+      groundTruth
     });
   }
 
