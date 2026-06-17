@@ -31,16 +31,36 @@ function mockReqRes(body) {
   return { req, res, get: () => ({ statusCode, body: result }) };
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Mistral applique un rate limit par minute : on retente avec backoff sur 429
+// plutôt que de compter l'appel comme un échec définitif.
+async function withRetry(callFn, label) {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const out = await callFn();
+    if (out.statusCode !== 429) return out;
+    const backoffMs = 3000 * attempt;
+    console.log(`  ${label}: 429 rate limited, retry ${attempt}/${maxAttempts} dans ${backoffMs}ms`);
+    await sleep(backoffMs);
+  }
+  return callFn();
+}
+
 async function callOcr(fileBase64, mimeType) {
-  const { req, res, get } = mockReqRes({ fileBase64, mimeType });
-  await ocrHandler(req, res);
-  return get();
+  return withRetry(async () => {
+    const { req, res, get } = mockReqRes({ fileBase64, mimeType });
+    await ocrHandler(req, res);
+    return get();
+  }, 'OCR');
 }
 
 async function callExtract(ocrText, docType) {
-  const { req, res, get } = mockReqRes({ ocrText, docType });
-  await extractHandler(req, res);
-  return get();
+  return withRetry(async () => {
+    const { req, res, get } = mockReqRes({ ocrText, docType });
+    await extractHandler(req, res);
+    return get();
+  }, 'EXTRACT');
 }
 
 function fileToDataUrl(filePath) {
@@ -95,6 +115,8 @@ async function main() {
       fields,
       groundTruth
     });
+
+    await sleep(800); // throttling doux entre documents pour respecter le rate limit Mistral
   }
 
   const outPath = path.join(__dirname, 'results.json');
